@@ -80,6 +80,14 @@
 
 //==============================================================================
 
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+#define YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED(CODE) CODE
+#else
+#define YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED(CODE)
+#endif
+
+//==============================================================================
+
 #include <tuple>
 #include <unordered_map>
 

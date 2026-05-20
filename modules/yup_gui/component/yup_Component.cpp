@@ -1341,52 +1341,16 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
     options.isRepainting = true;
 
-#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
-    const bool profilingActive = PaintProfiler::getInstance().isEnabled()
-                              && paintProfileStats != nullptr;
-
-    if (profilingActive)
     {
+#if YUP_ENABLE_COMPONENT_PAINT_PROFILING
+        const bool profilingActive = PaintProfiler::getInstance().isEnabled() && paintProfileStats != nullptr;
+
         const auto frameIndex = PaintProfiler::getInstance().getCurrentFrameIndex();
         PaintProfileScope profileScope (*this, repaintArea, renderContinuous, frameIndex);
-
-        {
-            const auto globalState = g.saveState();
-
-            g.setOpacity (opacity);
-            g.setDrawingArea (bounds);
-            if (! options.unclippedRendering)
-                g.setClipPath (boundsToRedraw);
-
-            g.setTransform (transform);
-
-            bool canSkipPaint = false;
-            if (! options.unclippedRendering && ! isTransformed())
-                canSkipPaint = hasOpaqueChildCoveringArea (boundsToRedraw);
-
-            if (! canSkipPaint)
-            {
-                const auto paintState = g.saveState();
-                profileScope.beginSelf();
-                paint (g);
-                profileScope.endSelf();
-            }
-            else
-            {
-                profileScope.markSelfPaintSkipped();
-            }
-
-            for (auto child : children)
-                child->internalPaint (g, boundsToRedraw, renderContinuous);
-
-            profileScope.beginSelf();
-            paintOverChildren (g);
-            profileScope.endSelf();
-        }
-    }
-    else
+#else
+        constexpr bool profilingActive = false;
 #endif
-    {
+
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
@@ -1404,13 +1368,36 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         {
             const auto paintState = g.saveState();
 
-            paint (g);
+            if (profilingActive)
+            {
+                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.beginSelf();)
+                paint (g);
+                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.endSelf();)
+            }
+            else
+            {
+                paint (g);
+            }
+        }
+        else
+        {
+            if (profilingActive)
+                YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.markSelfPaintSkipped();)
         }
 
         for (auto child : children)
             child->internalPaint (g, boundsToRedraw, renderContinuous);
 
-        paintOverChildren (g);
+        if (profilingActive)
+        {
+            YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.beginSelf();)
+            paintOverChildren (g);
+            YUP_IF_COMPONENT_PAINT_PROFILING_ENABLED (profileScope.endSelf();)
+        }
+        else
+        {
+            paintOverChildren (g);
+        }
     }
 
     options.isRepainting = false;
