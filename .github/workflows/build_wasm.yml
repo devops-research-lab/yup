@@ -1,103 +1,98 @@
 name: Wasm
-
 on:
-  push:
-    paths:
-      - "CMakeLists.txt"
-      - "**/workflows/build_wasm.yml"
-      - "**/cmake/**"
-      - "**/examples/**"
-      - "**/modules/**"
-      - "**/tests/**"
-      - "**/thirdparty/**"
-      - "!**/native/generated/**"
-      - "!**/native/java*/**"
-      - "!**/native/*_android.*"
-      - "!**/native/*_apple.*"
-      - "!**/native/*_linux.*"
-      - "!**/native/*_ios.*"
-      - "!**/native/*_mac.*"
-      - "!**/native/*_windows.*"
-    branches:
-      - "**"
-
+  push: null
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
 env:
-  INSTALL_DEPS: >-
-    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
-    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
-    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+  INSTALL_DEPS: libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev libx11-dev
+    libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev libxrandr-dev
+    libxrender-dev libglu1-mesa-dev mesa-common-dev
   EM_VERSION: 3.1.45
-  EM_CACHE_FOLDER: "emsdk-cache"
-
+  EM_CACHE_FOLDER: emsdk-cache
 jobs:
-  build_tests:
+  configure:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
-    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Debug
+      run: emcmake cmake ${{github.workspace}} -B ${{runner.workspace}}/build -G "Ninja Multi-Config"
+        -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - name: Cache Configure
+      id: cache-build
+      uses: actions/cache/save@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
+    - working-directory: ${{runner.workspace}}/build/tests/Debug
       run: node yup_tests.js
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
-    - working-directory: ${{ runner.workspace }}/build/tests/Release
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
+    - working-directory: ${{runner.workspace}}/build/tests/Release
       run: node yup_tests.js
-
-  build_console:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - uses: actions/cache/restore@v4
       with:
-        version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
-
-  build_app:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
     - uses: seanmiddleditch/gha-setup-ninja@master
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - uses: actions/cache/restore@v4
       with:
-        version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
-
-  build_graphics:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
     - uses: seanmiddleditch/gha-setup-ninja@master
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - uses: actions/cache/restore@v4
       with:
-        version: ${{ env.EM_VERSION }}
-        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - name: Configure
-      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - uses: seanmiddleditch/gha-setup-ninja@master
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+      if: '!cancelled() && steps.cache-build.conclusion == ''success'''
